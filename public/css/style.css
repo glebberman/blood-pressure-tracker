@@ -1,0 +1,224 @@
+/* Основные стили */
+body {
+    font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+}
+
+/* Фиксированная кнопка меню */
+.menu-btn {
+    top: 20px;
+    right: 20px;
+    z-index: 1000;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    font-size: 20px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+}
+
+/* Стили для таблицы */
+.table-responsive {
+    max-height: 60vh;
+    overflow-y: auto;
+}
+
+.table th {
+    position: sticky;
+    top: 0;
+    background-color: #f8f9fa;
+    z-index: 10;
+}
+
+/* Стили для карточек */
+.card {
+    box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    border: none;
+    border-radius: 10px;
+}
+
+.card-header {
+    background-color: #f8f9fa;
+    border-bottom: 1px solid #dee2e6;
+    font-weight: 600;
+}
+
+/* Стили для форм */
+.form-control:focus,
+.form-select:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.25);
+}
+
+/* Стили для кнопок */
+.btn {
+    border-radius: 8px;
+    font-weight: 500;
+}
+
+.btn-primary {
+    background-color: #0d6efd;
+    border-color: #0d6efd;
+}
+
+.btn-primary:hover {
+    background-color: #0b5ed7;
+    border-color: #0a58ca;
+}
+
+/* Стили для toast уведомлений */
+.toast {
+    min-width: 300px;
+}
+
+.toast-header {
+    border-bottom: 1px solid rgba(0,0,0,.125);
+}
+
+.toast.bg-success .toast-header {
+    color: white;
+    background-color: #198754;
+    border-bottom-color: rgba(255,255,255,.25);
+}
+
+.toast.bg-danger .toast-header {
+    color: white;
+    background-color: #dc3545;
+    border-bottom-color: rgba(255,255,255,.25);
+}
+
+/* Стили для измерений в таблице */
+.measurement-cell {
+    font-family: 'Courier New', monospace;
+    font-size: 0.9rem;
+}
+
+.measurement-empty {
+    color: #6c757d;
+    font-style: italic;
+}
+
+/* Адаптивность */
+@media (max-width: 768px) {
+    .container {
+        padding: 0 10px;
+    }
+    
+    .card {
+        margin-bottom: 1rem;
+    }
+    
+    .table-responsive {
+        max-height: 50vh;
+    }
+    
+    .menu-btn {
+        width: 45px;
+        height: 45px;
+        font-size: 18px;
+    }
+}
+
+@media (max-width: 576px) {
+    .table {
+        font-size: 0.8rem;
+    }
+    
+    .btn {
+        font-size: 0.875rem;
+    }
+    
+    .card-body {
+        padding: 1rem 0.75rem;
+    }
+}
+
+/* Стили для загрузки */
+.loading-overlay {
+    position: relative;
+}
+
+.loading-overlay::after {
+    content: '';
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background-color: rgba(255, 255, 255, 0.8);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    z-index: 10;
+}
+
+/* Анимации */
+.fade-in {
+    animation: fadeIn 0.3s ease-in;
+}
+
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+
+/* Стили для модального окна */
+.modal-content {
+    border-radius: 10px;
+    border: none;
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
+}
+
+.modal-header {
+    border-bottom: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+}
+
+.modal-footer {
+    border-top: 1px solid #dee2e6;
+}
+
+/* Стили для offcanvas меню */
+.offcanvas {
+    border: none;
+    box-shadow: -2px 0 10px rgba(0,0,0,0.1);
+}
+
+.offcanvas-header {
+    border-bottom: 1px solid #dee2e6;
+    background-color: #f8f9fa;
+}
+
+/* Улучшенные стили для таблицы */
+.table > :not(caption) > * > * {
+    padding: 0.75rem;
+    border-bottom-width: 1px;
+}
+
+.table tbody tr:hover {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+/* Стили для статуса подключения */
+.connection-status {
+    position: fixed;
+    top: 80px;
+    right: 20px;
+    z-index: 1000;
+    padding: 0.5rem 1rem;
+    border-radius: 5px;
+    font-size: 0.875rem;
+    font-weight: 500;
+}
+
+.connection-status.online {
+    background-color: #d1edff;
+    color: #0c63e4;
+    border: 1px solid #b3d7ff;
+}
+
+.connection-status.offline {
+    background-color: #f8d7da;
+    color: #721c24;
+    border: 1px solid #f1aeb5;
+}
