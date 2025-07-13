@@ -11,6 +11,8 @@ document.addEventListener('DOMContentLoaded', function() {
     let measurementsData = new Map(); // Кэш данных измерений
     let saveTimeouts = new Map(); // Таймеры для автосохранения
     let isLoading = false;
+    let currentDaysLoaded = 30; // Количество загруженных дней
+    let loadingMoreData = false; // Флаг загрузки доп. данных
 
     // Элементы DOM
     const measurementsTable = document.getElementById('measurementsTable');
@@ -43,6 +45,9 @@ document.addEventListener('DOMContentLoaded', function() {
 
         // Обработчики событий
         setupEventListeners();
+        
+        // Настройка ленивой загрузки
+        setupInfiniteScroll();
     }
 
     function setupEventListeners() {
@@ -59,22 +64,36 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Создание таблицы с 30+ днями
     async function createDateTable() {
+        // Очищаем таблицу
+        measurementsTable.innerHTML = '';
+        
+        // Создаем первые 30 дней
+        addDaysToTable(30);
+        currentDaysLoaded = 30;
+    }
+    
+    // Добавление дней в таблицу
+    function addDaysToTable(daysCount, startFromDay = 0) {
         const today = new Date();
         const dates = [];
         
-        // Создаем массив дат на 30 дней назад от сегодня
-        for (let i = 0; i < 30; i++) {
+        // Создаем массив дат
+        for (let i = startFromDay; i < startFromDay + daysCount; i++) {
             const date = new Date(today);
             date.setDate(today.getDate() - i);
             dates.push(date.toISOString().split('T')[0]);
         }
         
-        // Очищаем таблицу
-        measurementsTable.innerHTML = '';
-        
         // Создаем строки для каждой даты
         dates.forEach(date => {
             const row = document.createElement('tr');
+            
+            // Проверяем, является ли дата первым числом месяца
+            const dateObj = new Date(date);
+            const isFirstOfMonth = dateObj.getDate() === 1;
+            const rowClass = isFirstOfMonth ? 'month-border' : '';
+            
+            row.className = rowClass;
             row.innerHTML = `
                 <td>${formatDate(date)}</td>
                 <td class="editable-cell" data-date="${date}" data-type="morning">
@@ -84,7 +103,13 @@ document.addEventListener('DOMContentLoaded', function() {
                     <span class="measurement-display">—</span>
                 </td>
             `;
-            measurementsTable.appendChild(row);
+            
+            if (startFromDay === 0) {
+                measurementsTable.appendChild(row);
+            } else {
+                // Добавляем в конец таблицы
+                measurementsTable.appendChild(row);
+            }
         });
     }
 
@@ -124,11 +149,36 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
+        // Обработка backspace для слэша
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Backspace') {
+                handleBackspace(e, input);
+            }
+        });
+        
         // Автоформатирование ввода
         input.addEventListener('input', (e) => handleInputFormatting(e, input));
         
         // Автосохранение через 5 секунд (без потери фокуса)
         setupAutoSave(input, cell, date, type);
+    }
+
+    // Обработка нажатия backspace для удаления слэша
+    function handleBackspace(e, input) {
+        const value = input.value;
+        const cursorPosition = input.selectionStart;
+        
+        // Если курсор находится сразу после слэша
+        if (cursorPosition > 0 && value.charAt(cursorPosition - 1) === '/') {
+            e.preventDefault();
+            
+            // Удаляем слэш и предыдущую цифру
+            const beforeSlash = value.substring(0, cursorPosition - 2);
+            const afterSlash = value.substring(cursorPosition);
+            
+            input.value = beforeSlash + afterSlash;
+            input.setSelectionRange(cursorPosition - 2, cursorPosition - 2);
+        }
     }
 
     // Автоформатирование ввода
@@ -354,11 +404,11 @@ document.addEventListener('DOMContentLoaded', function() {
         showLoading(true);
 
         try {
-            // Загружаем данные за последние 30 дней
+            // Загружаем данные за загруженные дни
             const dateTo = getCurrentDate();
-            const dateFrom = getDateNDaysAgo(29);
+            const dateFrom = getDateNDaysAgo(currentDaysLoaded - 1);
             
-            const response = await api.getMeasurements(1, 100, dateFrom, dateTo);
+            const response = await api.getMeasurements(1, 1000, dateFrom, dateTo);
             
             if (response.success) {
                 // Заполняем кэш данных
@@ -384,6 +434,60 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
     
+    // Ленивая загрузка предыдущих дней
+    async function loadMoreDays() {
+        if (loadingMoreData) return;
+        
+        loadingMoreData = true;
+        
+        try {
+            // Добавляем еще 30 дней в таблицу
+            addDaysToTable(30, currentDaysLoaded);
+            currentDaysLoaded += 30;
+            
+            // Загружаем данные для новых дней
+            const dateTo = getDateNDaysAgo(currentDaysLoaded - 30);
+            const dateFrom = getDateNDaysAgo(currentDaysLoaded - 1);
+            
+            const response = await api.getMeasurements(1, 1000, dateFrom, dateTo);
+            
+            if (response.success) {
+                // Добавляем новые данные в кэш
+                response.data.forEach(measurement => {
+                    if (measurement.morning_systolic) {
+                        const morningValue = `${measurement.morning_systolic}/${measurement.morning_diastolic} ${measurement.morning_pulse}`;
+                        measurementsData.set(`${measurement.date}-morning`, morningValue);
+                    }
+                    if (measurement.evening_systolic) {
+                        const eveningValue = `${measurement.evening_systolic}/${measurement.evening_diastolic} ${measurement.evening_pulse}`;
+                        measurementsData.set(`${measurement.date}-evening`, eveningValue);
+                    }
+                });
+                
+                // Обновляем только новые ячейки
+                updateNewCellsWithData();
+            }
+        } catch (error) {
+            console.error('Ошибка при загрузке дополнительных данных:', error);
+        } finally {
+            loadingMoreData = false;
+        }
+    }
+    
+    // Настройка бесконечной прокрутки
+    function setupInfiniteScroll() {
+        const tableContainer = document.querySelector('.table-responsive');
+        
+        tableContainer.addEventListener('scroll', () => {
+            const { scrollTop, scrollHeight, clientHeight } = tableContainer;
+            
+            // Если прокрутили почти до конца (осталось 200px)
+            if (scrollHeight - scrollTop - clientHeight < 200 && !loadingMoreData) {
+                loadMoreDays();
+            }
+        });
+    }
+    
     // Обновление таблицы с загруженными данными
     function updateTableWithData() {
         const cells = measurementsTable.querySelectorAll('.editable-cell');
@@ -397,6 +501,27 @@ document.addEventListener('DOMContentLoaded', function() {
             if (display) {
                 display.textContent = value;
             }
+        });
+    }
+    
+    // Обновление только новых ячеек
+    function updateNewCellsWithData() {
+        const allRows = measurementsTable.querySelectorAll('tr');
+        const newRows = Array.from(allRows).slice(-30); // Последние 30 строк
+        
+        newRows.forEach(row => {
+            const cells = row.querySelectorAll('.editable-cell');
+            cells.forEach(cell => {
+                const date = cell.dataset.date;
+                const type = cell.dataset.type;
+                const key = `${date}-${type}`;
+                const value = measurementsData.get(key) || '—';
+                
+                const display = cell.querySelector('.measurement-display');
+                if (display) {
+                    display.textContent = value;
+                }
+            });
         });
     }
 
