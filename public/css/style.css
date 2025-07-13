@@ -98,6 +98,37 @@ body {
     font-style: italic;
 }
 
+/* Стили для редактируемых ячеек */
+.editable-cell {
+    cursor: pointer;
+    position: relative;
+}
+
+.editable-cell:hover {
+    background-color: rgba(13, 110, 253, 0.1);
+}
+
+.editable-cell input {
+    width: 100%;
+    border: none;
+    background: transparent;
+    padding: 0.25rem;
+    font-family: 'Courier New', monospace;
+}
+
+.editable-cell input:focus {
+    outline: 2px solid #0d6efd;
+    outline-offset: -2px;
+    background-color: white;
+}
+
+.measurement-display {
+    display: block;
+    padding: 0.25rem;
+    font-family: 'Courier New', monospace;
+    min-height: 1.5rem;
+}
+
 /* Адаптивность */
 @media (max-width: 768px) {
     .container {

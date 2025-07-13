@@ -31,49 +31,6 @@
     </div>
 
     <div class="container mt-4">
-        <!-- Форма добавления измерений -->
-        <div class="row justify-content-center mb-4">
-            <div class="col-md-8">
-                <div class="card">
-                    <div class="card-body">
-                        <form id="measurementForm">
-                            <div class="row g-3 align-items-end">
-                                <div class="col-md-4">
-                                    <label for="measurementDate" class="form-label">Дата</label>
-                                    <input type="date" class="form-control" id="measurementDate" required>
-                                </div>
-                                <div class="col-md-3">
-                                    <label for="measurementType" class="form-label">Время</label>
-                                    <select class="form-select" id="measurementType" required>
-                                        <option value="">Выберите время</option>
-                                        <option value="morning">Утро</option>
-                                        <option value="evening">Вечер</option>
-                                    </select>
-                                </div>
-                                <div class="col-md-2">
-                                    <label for="systolic" class="form-label">Систолическое</label>
-                                    <input type="number" class="form-control" id="systolic" min="50" max="300" required>
-                                </div>
-                                <div class="col-md-2">
-                                    <label for="diastolic" class="form-label">Диастолическое</label>
-                                    <input type="number" class="form-control" id="diastolic" min="30" max="200" required>
-                                </div>
-                                <div class="col-md-1">
-                                    <label for="pulse" class="form-label">Пульс</label>
-                                    <input type="number" class="form-control" id="pulse" min="30" max="200" required>
-                                </div>
-                                <div class="col-md-12 text-center">
-                                    <button type="submit" class="btn btn-primary btn-lg">
-                                        💾 Записать
-                                    </button>
-                                </div>
-                            </div>
-                        </form>
-                    </div>
-                </div>
-            </div>
-        </div>
-
         <!-- Таблица измерений -->
         <div class="row justify-content-center">
             <div class="col-md-10">
@@ -92,11 +49,6 @@
                                     <!-- Данные загружаются динамически -->
                                 </tbody>
                             </table>
-                        </div>
-                        
-                        <!-- Кнопка загрузки дополнительных данных -->
-                        <div class="text-center mt-3" id="loadMoreContainer">
-                            <button class="btn btn-outline-primary" id="loadMoreBtn">Загрузить еще</button>
                         </div>
                         
                         <!-- Индикатор загрузки -->

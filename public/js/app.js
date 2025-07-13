@@ -8,14 +8,12 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     // Глобальные переменные
-    let currentPage = 1;
+    let measurementsData = new Map(); // Кэш данных измерений
+    let saveTimeouts = new Map(); // Таймеры для автосохранения
     let isLoading = false;
-    let hasMoreData = true;
 
     // Элементы DOM
-    const measurementForm = document.getElementById('measurementForm');
     const measurementsTable = document.getElementById('measurementsTable');
-    const loadMoreBtn = document.getElementById('loadMoreBtn');
     const loadingSpinner = document.getElementById('loadingSpinner');
     const exportModal = new bootstrap.Modal(document.getElementById('exportModal'));
     const exportBtn = document.getElementById('exportBtn');
@@ -33,14 +31,14 @@ document.addEventListener('DOMContentLoaded', function() {
             userName.textContent = user.name;
         }
 
-        // Устанавливаем текущую дату
-        document.getElementById('measurementDate').value = getCurrentDate();
-
         // Устанавливаем диапазон дат для экспорта (последний месяц)
         document.getElementById('dateTo').value = getCurrentDate();
         document.getElementById('dateFrom').value = getDateMonthAgo();
 
-        // Загружаем первую страницу данных
+        // Создаем таблицу с 30+ днями
+        await createDateTable();
+
+        // Загружаем данные измерений
         await loadMeasurements();
 
         // Обработчики событий
@@ -48,12 +46,6 @@ document.addEventListener('DOMContentLoaded', function() {
     }
 
     function setupEventListeners() {
-        // Форма добавления измерения
-        measurementForm.addEventListener('submit', handleMeasurementSubmit);
-
-        // Кнопка загрузки дополнительных данных
-        loadMoreBtn.addEventListener('click', loadMoreMeasurements);
-
         // Кнопки меню
         exportBtn.addEventListener('click', () => exportModal.show());
         logoutBtn.addEventListener('click', handleLogout);
@@ -61,114 +53,202 @@ document.addEventListener('DOMContentLoaded', function() {
         // Кнопка скачивания
         downloadBtn.addEventListener('click', handleExport);
 
-        // Валидация полей ввода
-        setupValidation();
+        // Обработчики для inline редактирования
+        setupInlineEditing();
     }
 
-    function setupValidation() {
-        const systolic = document.getElementById('systolic');
-        const diastolic = document.getElementById('diastolic');
-        const pulse = document.getElementById('pulse');
-
-        // Валидация систолического давления
-        systolic.addEventListener('input', function() {
-            const value = parseInt(this.value);
-            const diastolicValue = parseInt(diastolic.value);
-            
-            if (value && diastolicValue && value <= diastolicValue) {
-                this.setCustomValidity('Систолическое давление должно быть больше диастолического');
-            } else {
-                this.setCustomValidity('');
-            }
-        });
-
-        // Валидация диастолического давления
-        diastolic.addEventListener('input', function() {
-            const value = parseInt(this.value);
-            const systolicValue = parseInt(systolic.value);
-            
-            if (value && systolicValue && systolicValue <= value) {
-                systolic.setCustomValidity('Систолическое давление должно быть больше диастолического');
-            } else {
-                systolic.setCustomValidity('');
-            }
+    // Создание таблицы с 30+ днями
+    async function createDateTable() {
+        const today = new Date();
+        const dates = [];
+        
+        // Создаем массив дат на 30 дней назад от сегодня
+        for (let i = 0; i < 30; i++) {
+            const date = new Date(today);
+            date.setDate(today.getDate() - i);
+            dates.push(date.toISOString().split('T')[0]);
+        }
+        
+        // Очищаем таблицу
+        measurementsTable.innerHTML = '';
+        
+        // Создаем строки для каждой даты
+        dates.forEach(date => {
+            const row = document.createElement('tr');
+            row.innerHTML = `
+                <td>${formatDate(date)}</td>
+                <td class="editable-cell" data-date="${date}" data-type="morning">
+                    <span class="measurement-display">—</span>
+                </td>
+                <td class="editable-cell" data-date="${date}" data-type="evening">
+                    <span class="measurement-display">—</span>
+                </td>
+            `;
+            measurementsTable.appendChild(row);
         });
     }
 
-    async function handleMeasurementSubmit(e) {
-        e.preventDefault();
+    // Настройка inline редактирования
+    function setupInlineEditing() {
+        measurementsTable.addEventListener('click', function(e) {
+            const cell = e.target.closest('.editable-cell');
+            if (cell && !cell.querySelector('input')) {
+                makeEditable(cell);
+            }
+        });
+    }
+    
+    // Делаем ячейку редактируемой
+    function makeEditable(cell) {
+        const currentValue = cell.querySelector('.measurement-display').textContent;
+        const date = cell.dataset.date;
+        const type = cell.dataset.type;
+        
+        // Создаем input поле
+        const input = document.createElement('input');
+        input.type = 'text';
+        input.className = 'form-control form-control-sm';
+        input.placeholder = 'ddd/dd ddd';
+        input.value = currentValue === '—' ? '' : currentValue;
+        
+        // Заменяем содержимое ячейки
+        cell.innerHTML = '';
+        cell.appendChild(input);
+        input.focus();
+        
+        // Обработчики событий
+        input.addEventListener('blur', () => handleCellSave(cell, input, date, type));
+        input.addEventListener('keypress', (e) => {
+            if (e.key === 'Enter') {
+                input.blur();
+            }
+        });
+        
+        // Автосохранение через 5 секунд
+        const timeoutKey = `${date}-${type}`;
+        if (saveTimeouts.has(timeoutKey)) {
+            clearTimeout(saveTimeouts.get(timeoutKey));
+        }
+        
+        const timeout = setTimeout(() => {
+            if (document.contains(input)) {
+                input.blur();
+            }
+        }, 5000);
+        
+        saveTimeouts.set(timeoutKey, timeout);
+    }
 
-        const date = document.getElementById('measurementDate').value;
-        const type = document.getElementById('measurementType').value;
-        const systolic = parseInt(document.getElementById('systolic').value);
-        const diastolic = parseInt(document.getElementById('diastolic').value);
-        const pulse = parseInt(document.getElementById('pulse').value);
-
-        // Дополнительная валидация
-        if (systolic <= diastolic) {
-            showToast('Систолическое давление должно быть больше диастолического', 'error');
+    // Обработка сохранения данных из ячейки
+    async function handleCellSave(cell, input, date, type) {
+        const value = input.value.trim();
+        const timeoutKey = `${date}-${type}`;
+        
+        // Очищаем таймер автосохранения
+        if (saveTimeouts.has(timeoutKey)) {
+            clearTimeout(saveTimeouts.get(timeoutKey));
+            saveTimeouts.delete(timeoutKey);
+        }
+        
+        if (value === '') {
+            // Пустое значение - показываем прочерк
+            restoreCell(cell, '—');
             return;
         }
-
-        // Показываем индикатор загрузки
-        const submitBtn = measurementForm.querySelector('button[type="submit"]');
-        const originalText = submitBtn.innerHTML;
-        submitBtn.disabled = true;
-        submitBtn.innerHTML = '<span class="spinner-border spinner-border-sm" role="status"></span> Сохранение...';
-
+        
+        // Валидация формата
+        const validationResult = validateMeasurementFormat(value);
+        if (!validationResult.isValid) {
+            // Неверный формат - восстанавливаем предыдущее значение
+            const originalValue = measurementsData.get(`${date}-${type}`) || '—';
+            restoreCell(cell, originalValue);
+            showToast('Неверный формат данных. Используйте формат: 120/80 70', 'error');
+            return;
+        }
+        
+        // Сохраняем данные
+        const { systolic, diastolic, pulse } = validationResult;
+        
         try {
+            // Показываем индикатор загрузки в ячейке
+            cell.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>';
+            
             const response = await api.createMeasurement(date, type, systolic, diastolic, pulse);
             
             if (response.success) {
-                showToast(response.message || 'Измерение сохранено', 'success');
-                
-                // Очищаем форму (кроме даты)
-                document.getElementById('measurementType').value = '';
-                document.getElementById('systolic').value = '';
-                document.getElementById('diastolic').value = '';
-                document.getElementById('pulse').value = '';
-
-                // Перезагружаем данные
-                await reloadMeasurements();
+                const formattedValue = `${systolic}/${diastolic} ${pulse}`;
+                measurementsData.set(`${date}-${type}`, formattedValue);
+                restoreCell(cell, formattedValue);
+                showToast('Измерение сохранено', 'success');
+            } else {
+                throw new Error(response.message || 'Ошибка сохранения');
             }
         } catch (error) {
-            showToast(error.message || 'Ошибка при сохранении измерения', 'error');
-        } finally {
-            submitBtn.disabled = false;
-            submitBtn.innerHTML = originalText;
+            const originalValue = measurementsData.get(`${date}-${type}`) || '—';
+            restoreCell(cell, originalValue);
+            showToast(error.message || 'Ошибка при сохранении', 'error');
         }
     }
+    
+    // Восстановление обычного вида ячейки
+    function restoreCell(cell, value) {
+        cell.innerHTML = `<span class="measurement-display">${value}</span>`;
+    }
+    
+    // Валидация формата измерения
+    function validateMeasurementFormat(value) {
+        // Regex для формата: ddd/dd ddd (например: 120/80 70)
+        const regex = /^(\d{2,3})\/(\d{2,3})\s+(\d{2,3})$/;
+        const match = value.match(regex);
+        
+        if (!match) {
+            return { isValid: false };
+        }
+        
+        const systolic = parseInt(match[1]);
+        const diastolic = parseInt(match[2]);
+        const pulse = parseInt(match[3]);
+        
+        // Проверяем диапазоны
+        if (systolic < 50 || systolic > 300 ||
+            diastolic < 30 || diastolic > 200 ||
+            pulse < 30 || pulse > 200 ||
+            systolic <= diastolic) {
+            return { isValid: false };
+        }
+        
+        return { isValid: true, systolic, diastolic, pulse };
+    }
 
-    async function loadMeasurements(page = 1) {
+    // Загрузка данных измерений и заполнение таблицы
+    async function loadMeasurements() {
         if (isLoading) return;
 
         isLoading = true;
         showLoading(true);
 
         try {
-            const response = await api.getMeasurements(page);
+            // Загружаем данные за последние 30 дней
+            const dateTo = getCurrentDate();
+            const dateFrom = getDateNDaysAgo(29);
+            
+            const response = await api.getMeasurements(1, 100, dateFrom, dateTo);
             
             if (response.success) {
-                const measurements = response.data;
-                
-                if (page === 1) {
-                    // Первая загрузка - очищаем таблицу
-                    measurementsTable.innerHTML = '';
-                }
-
-                // Добавляем новые строки
-                measurements.forEach(measurement => {
-                    addMeasurementRow(measurement);
+                // Заполняем кэш данных
+                response.data.forEach(measurement => {
+                    if (measurement.morning_systolic) {
+                        const morningValue = `${measurement.morning_systolic}/${measurement.morning_diastolic} ${measurement.morning_pulse}`;
+                        measurementsData.set(`${measurement.date}-morning`, morningValue);
+                    }
+                    if (measurement.evening_systolic) {
+                        const eveningValue = `${measurement.evening_systolic}/${measurement.evening_diastolic} ${measurement.evening_pulse}`;
+                        measurementsData.set(`${measurement.date}-evening`, eveningValue);
+                    }
                 });
-
-                // Проверяем, есть ли еще данные
-                hasMoreData = page < response.totalPages;
                 
-                // Показываем/скрываем кнопку "Загрузить еще"
-                document.getElementById('loadMoreContainer').style.display = 
-                    hasMoreData ? 'block' : 'none';
-
-                currentPage = page;
+                // Обновляем таблицу
+                updateTableWithData();
             }
         } catch (error) {
             showToast(error.message || 'Ошибка при загрузке данных', 'error');
@@ -177,47 +257,25 @@ document.addEventListener('DOMContentLoaded', function() {
             showLoading(false);
         }
     }
-
-    async function loadMoreMeasurements() {
-        if (hasMoreData) {
-            await loadMeasurements(currentPage + 1);
-        }
-    }
-
-    async function reloadMeasurements() {
-        currentPage = 1;
-        hasMoreData = true;
-        await loadMeasurements(1);
-    }
-
-    function addMeasurementRow(measurement) {
-        const row = document.createElement('tr');
-        row.className = 'fade-in';
-        
-        const morningMeasurement = formatMeasurement(
-            measurement.morning_systolic,
-            measurement.morning_diastolic,
-            measurement.morning_pulse
-        );
-        
-        const eveningMeasurement = formatMeasurement(
-            measurement.evening_systolic,
-            measurement.evening_diastolic,
-            measurement.evening_pulse
-        );
-
-        row.innerHTML = `
-            <td>${formatDate(measurement.date)}</td>
-            <td>${morningMeasurement}</td>
-            <td>${eveningMeasurement}</td>
-        `;
-
-        measurementsTable.appendChild(row);
+    
+    // Обновление таблицы с загруженными данными
+    function updateTableWithData() {
+        const cells = measurementsTable.querySelectorAll('.editable-cell');
+        cells.forEach(cell => {
+            const date = cell.dataset.date;
+            const type = cell.dataset.type;
+            const key = `${date}-${type}`;
+            const value = measurementsData.get(key) || '—';
+            
+            const display = cell.querySelector('.measurement-display');
+            if (display) {
+                display.textContent = value;
+            }
+        });
     }
 
     function showLoading(show) {
         loadingSpinner.style.display = show ? 'block' : 'none';
-        loadMoreBtn.disabled = show;
     }
 
     async function handleExport() {
@@ -272,26 +330,10 @@ document.addEventListener('DOMContentLoaded', function() {
         }
     }
 
-    // Обработка клавиши Enter в форме
-    measurementForm.addEventListener('keypress', function(e) {
-        if (e.key === 'Enter' && e.target.type !== 'submit') {
-            e.preventDefault();
-            const inputs = Array.from(this.querySelectorAll('input, select'));
-            const currentIndex = inputs.indexOf(e.target);
-            
-            if (currentIndex < inputs.length - 1) {
-                inputs[currentIndex + 1].focus();
-            } else {
-                this.dispatchEvent(new Event('submit'));
-            }
-        }
-    });
-
-    // Автоматическое обновление даты в полночь
-    setInterval(() => {
-        const currentDateInput = document.getElementById('measurementDate');
-        if (currentDateInput.value !== getCurrentDate()) {
-            currentDateInput.value = getCurrentDate();
-        }
-    }, 60000); // Проверяем каждую минуту
+    // Утилита для получения даты N дней назад
+    function getDateNDaysAgo(days) {
+        const date = new Date();
+        date.setDate(date.getDate() - days);
+        return date.toISOString().split('T')[0];
+    }
 });
