@@ -183,70 +183,65 @@ document.addEventListener('DOMContentLoaded', function() {
 
     // Автоформатирование ввода
     function handleInputFormatting(e, input) {
-        let value = input.value.replace(/[^\d]/g, ''); // Оставляем только цифры
+        // Получаем текущую позицию курсора
+        const cursorPosition = input.selectionStart;
+        const oldValue = input.value;
+        
+        // Удаляем все нецифровые символы для анализа
+        const digitsOnly = oldValue.replace(/[^\d]/g, '');
+        
+        // Ограничиваем количество цифр
+        if (digitsOnly.length > 7) {
+            input.value = oldValue.substring(0, oldValue.length - 1);
+            input.setSelectionRange(cursorPosition - 1, cursorPosition - 1);
+            return;
+        }
+        
         let formattedValue = '';
         
-        if (value.length > 0) {
-            // Первая часть - систолическое давление
-            if (value.length <= 2) {
-                formattedValue = value;
-            } else if (value.length === 3) {
-                // После 3 цифр автоматически ставим слэш
-                formattedValue = value + '/';
-            } else {
-                // Проверяем, нужно ли ставить слэш после 2 цифр
-                const firstTwo = value.substring(0, 2);
-                const thirdDigit = value.charAt(2);
-                
-                if (parseInt(firstTwo) >= 30 || parseInt(thirdDigit) > 2) {
-                    // Ставим слэш после 2 цифр
-                    const systolic = value.substring(0, 2);
-                    const rest = value.substring(2);
-                    
-                    if (rest.length <= 2) {
-                        formattedValue = systolic + '/' + rest;
-                    } else if (rest.length === 3) {
-                        formattedValue = systolic + '/' + rest + ' ';
-                    } else {
-                        const diastolic = rest.substring(0, 2);
-                        const pulse = rest.substring(2);
-                        formattedValue = systolic + '/' + diastolic + ' ' + pulse;
-                    }
-                } else {
-                    // Оставляем 3 цифры для систолического
-                    if (value.length <= 3) {
-                        formattedValue = value;
-                    } else if (value.length === 4) {
-                        formattedValue = value.substring(0, 3) + '/' + value.charAt(3);
-                    } else if (value.length <= 5) {
-                        formattedValue = value.substring(0, 3) + '/' + value.substring(3);
-                    } else if (value.length === 6) {
-                        formattedValue = value.substring(0, 3) + '/' + value.substring(3, 5) + ' ' + value.charAt(5);
-                    } else {
-                        const systolic = value.substring(0, 3);
-                        const diastolic = value.substring(3, 5);
-                        const pulse = value.substring(5);
-                        formattedValue = systolic + '/' + diastolic + ' ' + pulse;
-                    }
-                }
-            }
+        if (digitsOnly.length === 0) {
+            formattedValue = '';
+        } else if (digitsOnly.length <= 2) {
+            // 1-2 цифры: просто показываем цифры
+            formattedValue = digitsOnly;
+        } else if (digitsOnly.length === 3) {
+            // 3 цифры: автоматически добавляем слэш
+            formattedValue = digitsOnly + '/';
+        } else if (digitsOnly.length <= 5) {
+            // 4-5 цифр: формат XXX/XX
+            const systolic = digitsOnly.substring(0, 3);
+            const diastolic = digitsOnly.substring(3);
+            formattedValue = systolic + '/' + diastolic;
+        } else if (digitsOnly.length === 6) {
+            // 6 цифр: автоматически добавляем пробел
+            const systolic = digitsOnly.substring(0, 3);
+            const diastolic = digitsOnly.substring(3, 5);
+            const pulse = digitsOnly.substring(5);
+            formattedValue = systolic + '/' + diastolic + ' ' + pulse;
+        } else {
+            // 7 цифр: полный формат XXX/XX XXX
+            const systolic = digitsOnly.substring(0, 3);
+            const diastolic = digitsOnly.substring(3, 5);
+            const pulse = digitsOnly.substring(5, 7);
+            formattedValue = systolic + '/' + diastolic + ' ' + pulse;
         }
         
-        // Ограничиваем длину
-        if (formattedValue.replace(/[^\d]/g, '').length > 7) {
-            return; // Не позволяем вводить больше 7 цифр
-        }
-        
-        // Сохраняем позицию курсора
-        const cursorPosition = input.selectionStart;
-        const oldLength = input.value.length;
-        
+        // Устанавливаем новое значение
         input.value = formattedValue;
         
-        // Восстанавливаем позицию курсора
-        const newLength = formattedValue.length;
-        const newPosition = cursorPosition + (newLength - oldLength);
-        input.setSelectionRange(newPosition, newPosition);
+        // Корректируем позицию курсора
+        let newCursorPosition = cursorPosition;
+        if (formattedValue.length > oldValue.length) {
+            // Добавился символ - сдвигаем курсор
+            newCursorPosition += (formattedValue.length - oldValue.length);
+        }
+        
+        // Устанавливаем курсор в конец, если он выходит за границы
+        if (newCursorPosition > formattedValue.length) {
+            newCursorPosition = formattedValue.length;
+        }
+        
+        input.setSelectionRange(newCursorPosition, newCursorPosition);
     }
     
     // Настройка автосохранения
