@@ -1,0 +1,26 @@
+{
+  "name": "under-pressure",
+  "version": "1.0.0",
+  "description": "Приложение для учета кровяного давления",
+  "main": "server/app.js",
+  "scripts": {
+    "start": "node server/app.js",
+    "dev": "nodemon server/app.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": ["blood-pressure", "health", "tracking"],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "express": "^4.18.0",
+    "sqlite3": "^5.1.0",
+    "bcryptjs": "^2.4.0",
+    "jsonwebtoken": "^9.0.0",
+    "cors": "^2.8.0",
+    "helmet": "^7.1.0",
+    "express-rate-limit": "^7.1.0"
+  },
+  "devDependencies": {
+    "nodemon": "^3.0.0"
+  }
+}
