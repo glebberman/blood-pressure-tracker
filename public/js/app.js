@@ -108,7 +108,7 @@ document.addEventListener('DOMContentLoaded', function() {
         const input = document.createElement('input');
         input.type = 'text';
         input.className = 'form-control form-control-sm';
-        input.placeholder = 'ddd/dd ddd';
+        input.placeholder = '120/80 70';
         input.value = currentValue === '—' ? '' : currentValue;
         
         // Заменяем содержимое ячейки
@@ -124,22 +124,140 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Автосохранение через 5 секунд
-        const timeoutKey = `${date}-${type}`;
-        if (saveTimeouts.has(timeoutKey)) {
-            clearTimeout(saveTimeouts.get(timeoutKey));
-        }
+        // Автоформатирование ввода
+        input.addEventListener('input', (e) => handleInputFormatting(e, input));
         
-        const timeout = setTimeout(() => {
-            if (document.contains(input)) {
-                input.blur();
-            }
-        }, 5000);
-        
-        saveTimeouts.set(timeoutKey, timeout);
+        // Автосохранение через 5 секунд (без потери фокуса)
+        setupAutoSave(input, cell, date, type);
     }
 
-    // Обработка сохранения данных из ячейки
+    // Автоформатирование ввода
+    function handleInputFormatting(e, input) {
+        let value = input.value.replace(/[^\d]/g, ''); // Оставляем только цифры
+        let formattedValue = '';
+        
+        if (value.length > 0) {
+            // Первая часть - систолическое давление
+            if (value.length <= 2) {
+                formattedValue = value;
+            } else if (value.length === 3) {
+                // После 3 цифр автоматически ставим слэш
+                formattedValue = value + '/';
+            } else {
+                // Проверяем, нужно ли ставить слэш после 2 цифр
+                const firstTwo = value.substring(0, 2);
+                const thirdDigit = value.charAt(2);
+                
+                if (parseInt(firstTwo) >= 30 || parseInt(thirdDigit) > 2) {
+                    // Ставим слэш после 2 цифр
+                    const systolic = value.substring(0, 2);
+                    const rest = value.substring(2);
+                    
+                    if (rest.length <= 2) {
+                        formattedValue = systolic + '/' + rest;
+                    } else if (rest.length === 3) {
+                        formattedValue = systolic + '/' + rest + ' ';
+                    } else {
+                        const diastolic = rest.substring(0, 2);
+                        const pulse = rest.substring(2);
+                        formattedValue = systolic + '/' + diastolic + ' ' + pulse;
+                    }
+                } else {
+                    // Оставляем 3 цифры для систолического
+                    if (value.length <= 3) {
+                        formattedValue = value;
+                    } else if (value.length === 4) {
+                        formattedValue = value.substring(0, 3) + '/' + value.charAt(3);
+                    } else if (value.length <= 5) {
+                        formattedValue = value.substring(0, 3) + '/' + value.substring(3);
+                    } else if (value.length === 6) {
+                        formattedValue = value.substring(0, 3) + '/' + value.substring(3, 5) + ' ' + value.charAt(5);
+                    } else {
+                        const systolic = value.substring(0, 3);
+                        const diastolic = value.substring(3, 5);
+                        const pulse = value.substring(5);
+                        formattedValue = systolic + '/' + diastolic + ' ' + pulse;
+                    }
+                }
+            }
+        }
+        
+        // Ограничиваем длину
+        if (formattedValue.replace(/[^\d]/g, '').length > 7) {
+            return; // Не позволяем вводить больше 7 цифр
+        }
+        
+        // Сохраняем позицию курсора
+        const cursorPosition = input.selectionStart;
+        const oldLength = input.value.length;
+        
+        input.value = formattedValue;
+        
+        // Восстанавливаем позицию курсора
+        const newLength = formattedValue.length;
+        const newPosition = cursorPosition + (newLength - oldLength);
+        input.setSelectionRange(newPosition, newPosition);
+    }
+    
+    // Настройка автосохранения
+    function setupAutoSave(input, cell, date, type) {
+        const timeoutKey = `${date}-${type}`;
+        
+        function scheduleAutoSave() {
+            // Очищаем предыдущий таймер
+            if (saveTimeouts.has(timeoutKey)) {
+                clearTimeout(saveTimeouts.get(timeoutKey));
+            }
+            
+            // Устанавливаем новый таймер
+            const timeout = setTimeout(async () => {
+                const value = input.value.trim();
+                if (value && validateMeasurementFormat(value).isValid) {
+                    await saveValueWithoutClosing(input, cell, date, type, value);
+                }
+            }, 5000);
+            
+            saveTimeouts.set(timeoutKey, timeout);
+        }
+        
+        // Перепланируем сохранение при каждом вводе
+        input.addEventListener('input', scheduleAutoSave);
+        
+        // Начальное планирование
+        scheduleAutoSave();
+    }
+    
+    // Сохранение без закрытия поля
+    async function saveValueWithoutClosing(input, cell, date, type, value) {
+        const validationResult = validateMeasurementFormat(value);
+        if (!validationResult.isValid) return;
+        
+        const { systolic, diastolic, pulse } = validationResult;
+        
+        try {
+            const response = await api.createMeasurement(date, type, systolic, diastolic, pulse);
+            
+            if (response.success) {
+                const formattedValue = `${systolic}/${diastolic} ${pulse}`;
+                measurementsData.set(`${date}-${type}`, formattedValue);
+                
+                // Показываем кратковременное уведомление
+                showToast('Сохранено', 'success');
+                
+                // Обновляем плейсхолдер или добавляем визуальную обратную связь
+                input.style.backgroundColor = '#d4edda';
+                setTimeout(() => {
+                    if (document.contains(input)) {
+                        input.style.backgroundColor = '';
+                    }
+                }, 1000);
+            }
+        } catch (error) {
+            // Не показываем ошибку при автосохранении
+        }
+    }
+    
+    // Обработка сохранения данных из ячейки (при потере фокуса)
     async function handleCellSave(cell, input, date, type) {
         const value = input.value.trim();
         const timeoutKey = `${date}-${type}`;
@@ -166,9 +284,18 @@ document.addEventListener('DOMContentLoaded', function() {
             return;
         }
         
-        // Сохраняем данные
+        // Проверяем, не было ли уже сохранено автоматически
         const { systolic, diastolic, pulse } = validationResult;
+        const formattedValue = `${systolic}/${diastolic} ${pulse}`;
+        const currentSavedValue = measurementsData.get(`${date}-${type}`);
         
+        if (currentSavedValue === formattedValue) {
+            // Данные уже сохранены, просто закрываем поле
+            restoreCell(cell, formattedValue);
+            return;
+        }
+        
+        // Сохраняем данные
         try {
             // Показываем индикатор загрузки в ячейке
             cell.innerHTML = '<div class="spinner-border spinner-border-sm" role="status"></div>';
@@ -176,7 +303,6 @@ document.addEventListener('DOMContentLoaded', function() {
             const response = await api.createMeasurement(date, type, systolic, diastolic, pulse);
             
             if (response.success) {
-                const formattedValue = `${systolic}/${diastolic} ${pulse}`;
                 measurementsData.set(`${date}-${type}`, formattedValue);
                 restoreCell(cell, formattedValue);
                 showToast('Измерение сохранено', 'success');
