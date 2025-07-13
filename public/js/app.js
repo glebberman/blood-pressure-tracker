@@ -149,10 +149,12 @@ document.addEventListener('DOMContentLoaded', function() {
             }
         });
         
-        // Обработка backspace для слэша
+        // Обработка backspace для слэша и пробела
         input.addEventListener('keydown', (e) => {
             if (e.key === 'Backspace') {
                 handleBackspace(e, input);
+            } else if (e.key === ' ') {
+                handleSpaceInput(e, input);
             }
         });
         
@@ -163,7 +165,7 @@ document.addEventListener('DOMContentLoaded', function() {
         setupAutoSave(input, cell, date, type);
     }
 
-    // Обработка нажатия backspace для удаления слэша
+    // Обработка нажатия backspace для удаления слэша и автопробела
     function handleBackspace(e, input) {
         const value = input.value;
         const cursorPosition = input.selectionStart;
@@ -179,6 +181,39 @@ document.addEventListener('DOMContentLoaded', function() {
             input.value = beforeSlash + afterSlash;
             input.setSelectionRange(cursorPosition - 2, cursorPosition - 2);
         }
+        // Если курсор находится сразу после автоматически добавленного пробела
+        else if (cursorPosition > 0 && value.charAt(cursorPosition - 1) === ' ') {
+            // Проверяем, является ли это автопробелом (после 6 цифр)
+            const beforeSpace = value.substring(0, cursorPosition - 1);
+            const digitsBeforeSpace = beforeSpace.replace(/[^\d]/g, '');
+            
+            if (digitsBeforeSpace.length === 6) {
+                e.preventDefault();
+                
+                // Удаляем пробел и последнюю цифру
+                const beforeLastDigit = value.substring(0, cursorPosition - 2);
+                const afterSpace = value.substring(cursorPosition);
+                
+                input.value = beforeLastDigit + afterSpace;
+                input.setSelectionRange(cursorPosition - 2, cursorPosition - 2);
+            }
+        }
+    }
+    
+    // Обработка ввода пробела
+    function handleSpaceInput(e, input) {
+        const value = input.value;
+        const cursorPosition = input.selectionStart;
+        const digitsOnly = value.replace(/[^\d]/g, '');
+        
+        // Разрешаем ввод пробела только после 5 или более цифр
+        if (digitsOnly.length >= 5) {
+            // Пробел будет обработан в handleInputFormatting
+            return;
+        } else {
+            // Запрещаем ввод пробела
+            e.preventDefault();
+        }
     }
 
     // Автоформатирование ввода
@@ -187,11 +222,14 @@ document.addEventListener('DOMContentLoaded', function() {
         const cursorPosition = input.selectionStart;
         const oldValue = input.value;
         
+        // Проверяем, есть ли уже пробел в строке (ручной ввод)
+        const hasManualSpace = oldValue.includes(' ');
+        
         // Удаляем все нецифровые символы для анализа
         const digitsOnly = oldValue.replace(/[^\d]/g, '');
         
-        // Ограничиваем количество цифр
-        if (digitsOnly.length > 7) {
+        // Ограничиваем количество цифр (до 9 для поддержки XXX/XXX XXX)
+        if (digitsOnly.length > 9) {
             input.value = oldValue.substring(0, oldValue.length - 1);
             input.setSelectionRange(cursorPosition - 1, cursorPosition - 1);
             return;
@@ -208,22 +246,45 @@ document.addEventListener('DOMContentLoaded', function() {
             // 3 цифры: автоматически добавляем слэш
             formattedValue = digitsOnly + '/';
         } else if (digitsOnly.length <= 5) {
-            // 4-5 цифр: формат XXX/XX
+            // 4-5 цифр: формат XXX/XX или XXX/XXX
             const systolic = digitsOnly.substring(0, 3);
             const diastolic = digitsOnly.substring(3);
             formattedValue = systolic + '/' + diastolic;
-        } else if (digitsOnly.length === 6) {
-            // 6 цифр: автоматически добавляем пробел
+        } else if (digitsOnly.length === 6 && !hasManualSpace) {
+            // 6 цифр без ручного пробела: автоматически добавляем пробел
             const systolic = digitsOnly.substring(0, 3);
             const diastolic = digitsOnly.substring(3, 5);
             const pulse = digitsOnly.substring(5);
             formattedValue = systolic + '/' + diastolic + ' ' + pulse;
-        } else {
-            // 7 цифр: полный формат XXX/XX XXX
+        } else if (digitsOnly.length >= 6) {
+            // 6+ цифр: определяем формат по наличию пробела
             const systolic = digitsOnly.substring(0, 3);
-            const diastolic = digitsOnly.substring(3, 5);
-            const pulse = digitsOnly.substring(5, 7);
-            formattedValue = systolic + '/' + diastolic + ' ' + pulse;
+            
+            if (hasManualSpace || digitsOnly.length === 6) {
+                // Ручной пробел или ровно 6 цифр
+                if (digitsOnly.length <= 8) {
+                    // XXX/XX XXX формат
+                    const diastolic = digitsOnly.substring(3, 5);
+                    const pulse = digitsOnly.substring(5);
+                    formattedValue = systolic + '/' + diastolic + ' ' + pulse;
+                } else {
+                    // XXX/XXX XXX формат
+                    const diastolic = digitsOnly.substring(3, 6);
+                    const pulse = digitsOnly.substring(6);
+                    formattedValue = systolic + '/' + diastolic + ' ' + pulse;
+                }
+            } else {
+                // Без пробела - продолжаем заполнять диастолическое
+                if (digitsOnly.length <= 6) {
+                    const diastolic = digitsOnly.substring(3);
+                    formattedValue = systolic + '/' + diastolic;
+                } else {
+                    // Автопробел после 6 цифр
+                    const diastolic = digitsOnly.substring(3, 6);
+                    const pulse = digitsOnly.substring(6);
+                    formattedValue = systolic + '/' + diastolic + ' ' + pulse;
+                }
+            }
         }
         
         // Устанавливаем новое значение
@@ -368,7 +429,7 @@ document.addEventListener('DOMContentLoaded', function() {
     
     // Валидация формата измерения
     function validateMeasurementFormat(value) {
-        // Regex для формата: ddd/dd ddd (например: 120/80 70)
+        // Regex для формата: ddd/dd(d) ddd (например: 120/80 70 или 120/100 70)
         const regex = /^(\d{2,3})\/(\d{2,3})\s+(\d{2,3})$/;
         const match = value.match(regex);
         
